@@ -17,4 +17,6 @@ cd "${CLAUDE_PROJECT_DIR:-$(dirname "$0")/../..}"
 # would take the whole hook down with it under `set -e`.
 python3 -m pip install --quiet -e ".[dev]"
 
-echo "cloudledger dev environment ready: $(python3 -m pytest --version 2>&1 | head -1), $(ruff --version)"
+# Report via `python3 -m`, matching how CONTRIBUTING and CI invoke these: a
+# stale ruff earlier on PATH would otherwise pass locally and fail in CI.
+echo "cloudledger dev environment ready: $(python3 -m pytest --version 2>&1 | head -1), $(python3 -m ruff --version)"

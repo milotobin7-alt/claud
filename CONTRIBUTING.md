@@ -13,9 +13,15 @@ pip install -e ".[dev]"
 ## Before you open a pull request
 
 ```bash
-ruff check . && ruff format --check .
-pytest --cov=cloudledger --cov-report=term-missing
+python -m ruff check . && python -m ruff format --check .
+python -m pytest --cov=cloudledger --cov-report=term-missing
 ```
+
+Use `python -m ruff`, not bare `ruff`: a different ruff earlier on your `PATH` will
+happily report a clean tree that CI then rejects.
+
+Note that ruff formats Python code blocks inside Markdown, so the docs are part of the
+format gate too.
 
 CI runs exactly these on Python 3.11, 3.12, and 3.13, so a clean local run means a
 clean CI run.

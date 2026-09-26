@@ -11,8 +11,8 @@ pytest tests/test_forecast.py                        # one file
 pytest tests/test_forecast.py::test_steady_spend_projects_the_full_month   # one test
 pytest -k "anomal"                                   # by name pattern
 pytest --cov=cloudledger --cov-report=term-missing   # what CI runs
-ruff check . && ruff format --check .                # lint + format gate
-ruff check --fix . && ruff format .                  # autofix both
+python -m ruff check . && python -m ruff format --check .   # lint + format gate
+python -m ruff check --fix . && python -m ruff format .      # autofix both
 cloudledger report examples/usage-2026-09.csv --budget platform=4000
 cloudledger forecast examples/usage-2026-09.csv --as-of 2026-09-21 --team platform
 ```
@@ -20,6 +20,16 @@ cloudledger forecast examples/usage-2026-09.csv --as-of 2026-09-21 --team platfo
 Without an editable install, run the CLI as `PYTHONPATH=src python -m cloudledger.cli`.
 `pyproject.toml` sets `pythonpath = ["src"]` for pytest, so tests run from a bare
 checkout, but the `cloudledger` console script does not exist until you install.
+
+Invoke tooling as `python -m ruff` / `python -m pytest`, not the bare console script.
+A stale `ruff` earlier on `PATH` will otherwise shadow the installed one and report a
+clean tree that CI then rejects — that exact mismatch has already broken this build once.
+
+Ruff formats Python code blocks inside Markdown as of 0.16, so `README.md`, `CLAUDE.md`,
+and `CONTRIBUTING.md` are part of the format gate, not just `.py` files.
+
+Dev tool versions in `pyproject.toml` carry upper bounds deliberately. An unpinned
+formatter turns someone else's release day into red CI on a tree nobody touched.
 
 CI (`.github/workflows/ci.yml`) runs lint, format check, the suite on Python
 3.11/3.12/3.13, and a CLI smoke test against `examples/usage-2026-09.csv`. A clean

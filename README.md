@@ -78,8 +78,8 @@ from cloudledger import Budget, Ledger, forecast_month_end
 
 ledger = Ledger.from_csv("examples/usage-2026-09.csv")
 
-print(ledger.by_service())                      # {'compute': 1068940, ...} in cents
-print(ledger.anomalies(sigma=2.0))              # [(date(2026, 9, 14), 144351)]
+print(ledger.by_service())  # {'compute': 1068940, ...} in cents
+print(ledger.anomalies(sigma=2.0))  # [(date(2026, 9, 14), 144351)]
 print(ledger.over_budget([Budget("platform", 400_000)]))
 
 result = forecast_month_end(ledger.filter(team="platform"), as_of=date(2026, 9, 21))
