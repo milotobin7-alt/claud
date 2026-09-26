@@ -95,3 +95,82 @@ def test_anomalies_flag_the_spike():
 def test_flat_spend_has_no_anomalies():
     items = [LineItem(date(2026, 9, day), "compute", "platform", 100) for day in range(1, 11)]
     assert Ledger(items).anomalies() == []
+
+
+def test_bom_prefixed_export_still_parses(tmp_path):
+    path = tmp_path / "excel.csv"
+    path.write_text("﻿" + CSV, encoding="utf-8")
+    assert Ledger.from_csv(path).total_cents == 2750
+
+
+def test_lenient_mode_records_what_it_skipped(tmp_path):
+    path = tmp_path / "bad.csv"
+    path.write_text(CSV + "2026-09-04,compute,platform,oops\n", encoding="utf-8")
+    ledger = Ledger.from_csv(path, strict=False)
+    assert len(ledger) == 4
+    assert len(ledger.skipped) == 1
+    assert "bad.csv:6" in ledger.skipped[0]
+
+
+def test_line_number_survives_a_quoted_multiline_field(tmp_path):
+    path = tmp_path / "multiline.csv"
+    path.write_text(
+        'date,service,team,amount_usd\n2026-09-01,"com\npute",platform,1.00\n'
+        "2026-09-02,compute,platform,oops\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ParseError, match="multiline.csv:4"):
+        Ledger.from_csv(path)
+
+
+def test_credits_reduce_the_total():
+    ledger = Ledger(
+        [
+            LineItem(date(2026, 9, 1), "compute", "platform", 10_000),
+            LineItem(date(2026, 9, 1), "credit", "platform", -4_000),
+        ]
+    )
+    assert ledger.total_cents == 6_000
+
+
+def test_over_budget_refuses_a_multi_month_ledger():
+    ledger = Ledger(
+        [
+            LineItem(date(2026, 8, 1), "compute", "platform", 100_000),
+            LineItem(date(2026, 9, 1), "compute", "platform", 100_000),
+        ]
+    )
+    with pytest.raises(ValueError, match="spans 2 months"):
+        ledger.over_budget([Budget("platform", 150_000)])
+
+
+def test_over_budget_accepts_a_single_month(usage):
+    ledger = Ledger.from_csv(usage)
+    assert ledger.months() == {(2026, 9)}
+    assert set(ledger.over_budget([Budget("platform", 1500)])) == {"platform"}
+
+
+def test_daily_series_fills_gaps_with_zero():
+    ledger = Ledger(
+        [
+            LineItem(date(2026, 9, 1), "compute", "platform", 100),
+            LineItem(date(2026, 9, 4), "compute", "platform", 100),
+        ]
+    )
+    assert ledger.daily_series() == {
+        date(2026, 9, 1): 100,
+        date(2026, 9, 2): 0,
+        date(2026, 9, 3): 0,
+        date(2026, 9, 4): 100,
+    }
+
+
+def test_anomaly_on_sparse_data_is_not_hidden_by_missing_days():
+    # Two quiet days, a gap of nothing, then a 50x spike. Baselining only on
+    # days that have rows would raise the mean enough to bury it.
+    items = [
+        LineItem(date(2026, 9, 1), "compute", "platform", 100),
+        LineItem(date(2026, 9, 2), "compute", "platform", 100),
+        LineItem(date(2026, 9, 20), "egress", "platform", 5_000),
+    ]
+    assert Ledger(items).anomalies() == [(date(2026, 9, 20), 5_000)]

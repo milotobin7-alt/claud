@@ -60,8 +60,15 @@ budgets:
   platform: projected $9,973.23 vs $9,000.00 budget (111% — over)
 ```
 
-Add `--json` to either command for machine-readable output, `--lenient` to skip
-malformed rows instead of exiting, and `--service` to slice by service.
+Add `--json` to either command for machine-readable output, `--service` to slice by
+service, `--month YYYY-MM` to pin a multi-month export to one billing month, and
+`--lenient` to skip malformed rows — skipped rows are listed on stderr and in the JSON
+payload rather than quietly vanishing from the total.
+
+Budgets are monthly, so `report --budget` refuses an export spanning several months
+instead of reporting a fake breach; narrow it with `--month` first. On `forecast`, each
+budget is evaluated against its own team's projection unless you have already narrowed
+the ledger yourself.
 
 ## As a library
 
@@ -83,7 +90,12 @@ print(result.against(Budget("platform", 900_000)))
 
 **Money is integer cents, never floats.** Summing thousands of float dollars drifts;
 parsing goes through `Decimal` with half-up rounding so a half-cent charge rounds the
-way an accountant expects rather than the way `round()` does.
+way an accountant expects rather than the way `round()` does. Budget amounts on the
+command line go through the same path, so a cap and the spend it gates round identically.
+
+**Credits are negative line items, and they are kept.** Refunds, committed-use
+discounts, and adjustments arrive negative in real AWS CUR and GCP exports. Rejecting
+them would fail the load; dropping them would overstate spend.
 
 **The forecast uses a trailing window, not a month-to-date average.** One backfill or
 migration on the 2nd otherwise poisons the projection for the remaining 28 days. The
@@ -91,18 +103,22 @@ window defaults to 7 days and is clamped to the start of the month. Days inside 
 window with no usage count as zero — a quiet Sunday is real data, not a gap.
 
 **Anomaly detection is deliberately boring.** A day is flagged when it sits more than
-`sigma` population deviations above the mean. With fewer than three days of history,
-or with perfectly flat spend, it reports nothing rather than inventing signal.
+`sigma` population deviations above the mean, baselined over the ledger's full span with
+zero-spend days counted as the zeros they are — leaving them out raises the mean and
+buries spikes on sparse data. With fewer than three days of span, or with perfectly flat
+spend, it reports nothing rather than inventing signal.
 
 **Strict by default when reading.** `Ledger.from_csv` raises with the offending file
-and line number, because a vendor export that silently lost rows is worse than one
-that failed loudly. Pass `strict=False` when you genuinely want best-effort parsing.
+and physical line number, because a vendor export that silently lost rows is worse than
+one that failed loudly. Pass `strict=False` for best-effort parsing; what it dropped is
+on `Ledger.skipped`. Files are read as `utf-8-sig`, since an export that went through
+Excel carries a BOM that would otherwise corrupt the first header and drop every row.
 
 ## Development
 
 ```bash
 pip install -e ".[dev]"
-pytest                      # 38 tests
+pytest                      # 67 tests
 ruff check . && ruff format --check .
 ```
 

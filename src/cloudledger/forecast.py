@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import calendar
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 
 from cloudledger.ledger import Ledger
 from cloudledger.models import Budget
@@ -58,8 +58,11 @@ def forecast_month_end(
     spent = month.total_cents
     days_elapsed = as_of.day
 
-    window_start = max(month_start, as_of.fromordinal(as_of.toordinal() - window_days + 1))
-    window_span = (as_of - window_start).days + 1
+    # Clamp the lookback to the month before doing date arithmetic: subtracting
+    # a huge window_days first would overflow past date.min instead of clamping.
+    lookback = min(window_days, as_of.day)
+    window_start = as_of - timedelta(days=lookback - 1)
+    window_span = lookback
     window_total = month.filter(since=window_start).total_cents
     run_rate = round(window_total / window_span)
 

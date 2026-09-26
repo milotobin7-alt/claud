@@ -43,10 +43,20 @@ A `src/` layout package with no runtime dependencies. Four modules, layered bott
 ### Invariants that will bite you
 
 **Money is integer cents everywhere except display.** `LineItem.cents` is an `int`.
-Parsing goes through `Decimal(...).scaleb(2).to_integral_value(ROUND_HALF_UP)` — not
-`round()`, which is banker's rounding and drifts a ledger low on half-cent charges.
-Division to dollars happens only in `dollars`, in `Forecast.against`, and in `cli.py`'s
-payload builders. Introducing a float dollar amount anywhere else is a bug.
+All dollar strings — line items *and* CLI budget amounts — go through
+`models.parse_cents`, which is `Decimal(...).scaleb(2).to_integral_value(ROUND_HALF_UP)`,
+not `round()` (banker's rounding, drifts a ledger low on half-cent charges). Division to
+dollars happens only in `dollars`, in `Forecast.against`, and in `cli.py`'s payload
+builders. A float dollar amount anywhere else is a bug.
+
+**`cents` may be negative.** Credits and committed-use discounts are negative line items
+in real exports. Do not reintroduce a non-negative check.
+
+**Everything that can fail while parsing must raise `ParseError`**, so it flows through
+the line-number tagging, `--lenient`, and the CLI's handler. Watch for the cases that
+bypass it: `None` values from truncated rows, `Decimal("nan")`/`Decimal("Infinity")`
+(which construct fine), and `decimal.Overflow` (a `DecimalException`, *not* an
+`InvalidOperation`).
 
 **`Ledger.filter` returns a new `Ledger`, and both date bounds are inclusive.** Chaining
 filters is the intended way to narrow; nothing mutates in place except `add`.
@@ -61,8 +71,18 @@ pins this.
 number. `strict=False` silently drops bad rows; that mode exists for vendor exports and
 is what the CLI's `--lenient` sets.
 
-**`anomalies()` returns nothing below three days of history or on zero-variance data**,
-by design — not a bug to "fix".
+**`anomalies()` baselines on `daily_series()`, not `by_day()`.** `by_day` omits days
+with no rows; `daily_series` fills them with zero across the ledger's span. Using the
+former raises the mean and hides spikes on sparse data. `anomalies()` returning nothing
+below three days of span, or on zero-variance data, is by design — not a bug to "fix".
+
+**Budgets are monthly, so `over_budget` raises on a ledger spanning several months**
+rather than reporting a fake breach. The CLI's `--month YYYY-MM` is how a caller narrows
+one. On `forecast`, each budget is scoped to its own team unless `--team`/`--service`
+already narrowed the ledger — otherwise a team cap gets judged against org-wide spend.
+
+**`from_csv` reads `utf-8-sig`** (Excel BOM would corrupt the first header and drop every
+row) and reports `reader.line_num`, not a row counter, since quoted fields span lines.
 
 ## Conventions
 
