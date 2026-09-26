@@ -1,0 +1,2 @@
+# claud
+its for claude
